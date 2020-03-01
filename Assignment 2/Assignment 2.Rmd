@@ -1,0 +1,394 @@
+---
+title: "Unsupervised Clustering for Customer Grouping"
+author: 'Group 1: Luiz Carvalho, Manoj Soman Nair, Stanislav Taov'
+date: "29/02/2020"
+output:
+  html_document: default
+  word_document: default
+  pdf_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(grid)
+library(VIM)
+library(data.table)
+library(colorspace)
+library(readr)
+library(zoo)
+library(dplyr)
+library(leaflet)
+library(ggplot2)
+library(questionr)
+library(plyr)
+library(formattable)
+
+df <- read.csv('assignment-2-3.csv')
+```
+
+## Abstract
+
+To understand better the determinants of selling effectiveness, it is necessary to investigate the customers' product - and selling-related needs. The ability to identify properly the adherence of the product to the customer needs is viewed as critical to the correct classification of sales leads into selling categories of the sales calls.
+
+Differences in classification accuracy are proposed as key to explaining variations in sales performance. The differences in accuracy are posited to result from the attributes believed to identify customer requirements,  the quantitative levels associated with the attributes, and the degree of emphasis given to attributes in ascertaining client needs.
+
+Implications for the sales process are tremendous, not only in terms of the effectiveness of the sales but also in terms of the sales effort.
+
+## Problem statement /Business problem
+
+Based on the client profile identify the chances of success in reaching the client and once reaching it the chances of selling to it. Based on this percentage we would be able to classify the potential clients by “chance to be reached” and “chance to sell”. These two percentages would allow us to group these clients. This grouping would allow better management of the sales effort. 
+
+In summary, the objective is to identify patterns associating with the profile of the client with success in reaching and selling.
+
+The product being sold is a credit card and the client base is the pre-existing list of people having bank accounts in a large bank in Brazil.
+
+The bank doesn´t operate the sales itself. A third part company is sub-contracted to do the actual sales campaign through the phone. The database with the client’s details is forwarded to this company by the bank. 
+
+From the perspective of this third part company, the objective is how to maximize sales with the minimum sales effort.
+
+To address this issue the classification of the clients in terms of their propensity to be reached and to buy the product is crucial.
+
+In addition to that, the data exploration also gives insights about possible strategies of pre-processing the database which could eliminate the need for some types of calls.
+
+Another important point linked with the process is the fact that our concern here is how to increase the sales effectiveness, we assume that every client in the list, theoretically can have the credit card. There is no negative-classification in the sense that some profiles cannot get the card. The idea is just to identify if a profile is likely/unlikely to purchase a card. A priori eligibility for having the card was done by the bank when preparing the mailing sent to the third part company. Therefore we are not faced here with eventual ethical dilemmas (See responsible AI in consumer enterprise).
+
+## Approach /Analytical problem
+
+The first issue was to define which strategy we could use to group potential clients. It is important because the whole process is based on our capability of putting people in groups where we suppose they will behave similarly regards being accessible to the salesforce and regards actually buying the service.
+
+We used ten parameters and cluster these people using k-means, assuming the possibility of having 150 clusters. The number 150 was obtained from the decision tree. Note that we are mixing together parameters linked with the person and parameters linked with personal behaviour.
+
+## Datasets/Getting the data
+
+We used a real sanitized and anonymized dataset representing a subset of the clients operated by the third part company during the months of August, September and October of 2019, totalizing 343630 clients.
+
+## Data dictionary
+
+We have several information regards the clients:
+
+•	Age
+•	Sex
+•	Income
+•	Zipcode
+•	if the phone was a mobile or fix-line.
+•	Credit score of the client
+•	If the client has an active relationship with the bank (number of interactions within the month).
+•	How many products of the bank the client already have
+•	How many phone numbers the client has
+•	How many times the client was contact by telephone during the month
+
+
+We also have the results of the campaign:
+
+•	If the person was in fact reached
+•	If the sales actually happened.
+
+
+## Data exploration
+
+The data used contained 16 variables with 344627 observations. The variables included birth, sex, age, creditscor, rescen, city, typephone - landline or mobile number, tel_o, tel_a, enrri, incomerang, lat, lon, areacode, spoke, sold. The details can be seen below.
+
+
+```{r data}
+head(df)
+str(df) 
+```
+
+Let's make a copy of data for further analysis 
+
+```{r copy}
+df1 <- df
+```
+
+We will convert latitude and longitude columns into integers
+
+```{r convert_to_numeric}
+suppressWarnings(df1$lat <- as.numeric(df1$lat))
+suppressWarnings(df1$lon <- as.numeric(df1$lon))
+```
+
+Checking for missing values
+
+```{r missing, results="hide"}
+sum(is.na(df1))
+```
+
+We discovered that there were 184161 missing values locating within creditscor, lat, lon and city columns. We are going to replace missing values for creditscor with mean. Missing values for city, lat and lon columns will be removed.
+
+Replacing all missing creditscor values with the mean value of creditscor column.
+
+```{r mean, results="hide"}
+df1$creditscor <- sapply(df1$creditscor, is.numeric)
+df1$creditscor <- lapply(df1$creditscor, na.aggregate)
+```
+
+Dropping all missing values.
+
+```{r drop, results="hide"}
+df1 <- na.omit(df1)
+```
+
+Let's check the frequency of city column
+
+
+```{r unique_cities, results="hide"}
+questionr::freq(df1$city, cum = TRUE, sort = "dec", total = TRUE)
+unique(df1$city)
+```
+
+There are 5203 unique cities in the database with the most frequent cities are Sao Paulo, Rio De Janerio and Fortaleza combining around 15% of all cities in the dataset.
+
+To visualize the distribution of customer locations we used a leaflet library to plot each customer on the map. The graph below shows that customers are distributed in 6 main areas.
+
+
+```{r pressure, echo=FALSE, fig.cap="Map Brazil", out.width = '100%'}
+knitr::include_graphics("/Users/stantaov/111111.jpg")
+```
+
+
+We discovered that there are more female clients in the database. 
+
+
+```{r gender, echo=FALSE}
+ggplot(df1, aes(sex)) +
+  geom_bar(aes(fill = sex)) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Gender Distribution")
+```
+
+
+The graph below shows the difference in distribution by gender and filtered by sold credit cards. Even though, there are more female customers in the database the more conversions were made by male customers.
+
+
+```{r sex_sold, echo=FALSE}
+df1 %>%
+  filter(sold == 1) %>%
+  ggplot(df1, mapping = aes(sex)) +
+  geom_bar(aes(fill = sex)) +
+  theme_minimal() + 
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Gender Comparision by Credit Cards Sold")
+```
+
+There are more customers with primer cell phone numbers this most likely means that these customers are more reachable over phone.
+
+```{r phone_type, echo=FALSE}
+df1 %>%
+  filter(spoke == 1) %>%
+  ggplot(df1, mapping = aes(typephone)) +
+  geom_bar(aes(fill = typephone)) +
+  theme_minimal() +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Distribution of Phone Type")
+```
+
+The plot below reveals that female customers are more reachable on the phone  than male customers.
+
+```{r gender_spoke, echo=FALSE}
+df1 %>%
+  filter(spoke == 1) %>%
+  ggplot(df1, mapping = aes(sex)) +
+  geom_bar(aes(fill = sex)) +
+  theme_minimal() +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Reachable by Phone, Grouped by Gender")
+```
+
+The histogram is shown below, displays age distribution of the dataset. We see that age is distributed quite evenly, with a few customers having age below 25 and above 75. 
+
+```{r age, echo=FALSE}
+hist(df$age, col="blue", main="Distribution of Age", xlab="Age Class", ylab="Frequency", labels=TRUE)
+```
+
+However, by grouping age with gender, we can see that males have more right-skewed distribution meaning that male customers tend to be younger.
+
+```{r age_gender, echo=FALSE}
+ggplot(df1, aes(x=age, fill=sex, color=sex)) +
+  geom_histogram(position="identity", bins = 11, alpha=0.5) +
+  theme_minimal() +
+  ggtitle("Age Classes Grouped by Gender")
+```
+
+Next, we explore income categories to see what group of income category has the highest propensity to convert. Our dataset consists of five income categories where A category having the highest income and E having the lowest income. We see that the database is dominated by the lowest income customers, we will explore it further to find the percentage of conversions for each category.
+
+```{r income, echo=FALSE}
+suppressWarnings(ggplot(df1, aes(x=incomerang, fill='red')) +
+  geom_histogram(stat="count") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  theme_minimal() +
+    theme(legend.position = "none") +
+  ggtitle("Income Category Distribution"))
+```
+
+```{r income sold gender, echo=FALSE}
+suppressWarnings(ggplot(df1, aes(x=incomerang, fill=sex, color=sex)) +
+  geom_histogram(position="identity", stat="count") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  facet_grid(~sex) +
+  theme_minimal())
+```
+
+The plot above shows that income categories are distributed quite evenly among genders.
+
+```{r income sold4, echo=FALSE}
+df1 %>%
+  select(incomerang, sold) %>%
+  filter(sold == 1) %>%
+  ggplot(df1, mapping = aes(x=incomerang, fill='red')) +
+  geom_histogram(stat="count") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.2)) +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+As we can see conversions are dominated by E income category with 5419 credit cards sold. 
+
+```{r income sold table, echo=FALSE}
+df2 <- df1 %>%
+  select(incomerang, sold) %>%
+  filter(sold == 1)
+
+df3 <- df1 %>%
+  select(incomerang, sold)
+
+count2 <- count(df2, vars = "incomerang")
+count3 <- count(df3, vars = "incomerang")
+
+percentage_sales <- mapply('/', count2$freq, count3$freq)
+percentage_sales <- data.frame(percentage_sales)
+
+percentage_sales <- percentage_sales*100
+rownames(percentage_sales) <- c("A", "B", "C", "D", "E")
+
+formattable(percentage_sales)
+```
+
+What we see from the table above is the most conversions happened for the group with the lowest income category. This particular information raises some ethical concerns since people with the lower-income might be financially restrained and more likely to convert as they need more financial help. It would be interesting to know what percentage of conversions from the E income category are going to default. 
+
+
+```{r income sold month , echo=FALSE}
+df1 %>%
+  select(rescen, sold, sex) %>%
+  filter(sold == 1) %>%
+  ggplot(df1, mapping = aes(x=rescen, fill=sex)) +
+  geom_bar(position=position_dodge()) +
+  geom_text(stat = 'count',aes(label =..count..), position = position_dodge(0.9), vjust = -0.5) +
+  theme_minimal() +
+  ggtitle("Number of Transactions by Month, Grouped by Sold")
+```
+
+As we can observe from the graph above that the number of transactions per month has a high propensity to convert and males are more likely to convert with a low number of transactions.
+
+```{r income sold tel_a , echo=FALSE}
+df1 %>%
+  select(tel_a, sold, sex) %>%
+  filter(sold == 1) %>%
+  ggplot(df1, mapping = aes(x=tel_a, fill=sex)) +
+  geom_bar(position=position_dodge()) +
+  geom_text(stat = 'count',aes(label =..count..), position = position_dodge(0.9), vjust = -0.5) +
+  theme_minimal() + 
+  ggtitle("Number of Products, Grouped by Sold")
+```
+
+We see from the graph above that customers with 2 to 5 products are more likely to convert. 
+
+The plot below shows the distribution of credit score and as we can see a credit score close to the uniform distribution.
+
+```{r creditscor , echo=FALSE}
+suppressWarnings(ggplot(df, aes(x=creditscor, fill="red")) +
+                   geom_histogram(stat="count") +
+                   geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+                   theme_minimal() +
+                   theme(legend.position = "none") +
+                   ggtitle("Income Category Distribution"))
+```
+
+The histogram below shows that the majority of conversions contributed by lower credit score clients. It corresponds with previous findings that most of the conversions happened in the E (lowest) income category.  Even though the availability of landing options for low income and low credit score might provide additional help for struggling families. We need to take into consideration that high interest and additional fees that credit cards impose can push people into more debt and lead to a high percentage of defaults. We believe this information can be valuable for decision-makers to address the issues we discovered and provide appropriate solutions. 
+
+```{r creditscor sold , echo=FALSE}
+suppressWarnings(df %>%
+  filter(sold == 1) %>%
+  ggplot(df, mapping = aes(x=creditscor, fill="red")) +
+  geom_histogram(stat="count") +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  theme_minimal() +
+  theme(legend.position = "none") +
+  ggtitle("Income Category Distribution, Grouped by Sold"))
+```
+
+## Selecting the training data and the test data 
+
+The idea is to use 95% of the measurements as our training data and 5% as our test data. We had a database with 343.630 clients and we separated it into training data 313.750 and test data 29.880.
+
+
+## Model/Analytical model
+
+
+```{r Analytical model, echo=FALSE, fig.cap="Table 1", out.width = '100%'}
+knitr::include_graphics("/Users/stantaov/2222222.png")
+```
+
+## Normalization criteria  
+
+•	SEX – 0 M – 1 F
+•	Age – age/ bigger age (80)
+•	Income A – E -> 1 to 5 divided by 5
+•	Credit score – 1 to 10 -> credit score/10 (10)
+•	Recencia -> Number of transactions within the month 0 to 13 – Divided by 13 (13)
+•	Type Phone -> 0 Mobile and 1 Landline
+•	Tel_o -> Number of call within the month -> 0 – 10 Divided by 10 
+•	Tel_a ->Number of products Tel_a 0 -10 Divided by 10 Tel_a
+•	Enrri -> How many times tried sell something to the client 0-8 Divided by 8
+•	Zipcode divided by 100.000.000 
+
+## Summary of findings /Evaluating the results 
+
+We used a training dataset with 313.750 rows and a test set with 29.880 rows.
+
+The idea was to make the program predict the chance to reach and the chance to sell each one of the 29.880 clients and after doing the prediction check if the reach and the sales really happened.
+The results were as follows:
+
+### Reaching
+
+```{r table1, echo=FALSE, fig.cap="Table 1", out.width = '50%'}
+knitr::include_graphics("/Users/stantaov/333333.png")
+```
+
+Note that the code classified the clients very precisely. The table shows the number of clients classified in each range for reaching (by the code) and the two columns in the right show what effectively happened. We can note that real success was within the forecast in every range. That demonstrates that the code was effectively separating the clients by their potential in being reached.
+
+### Selling
+
+```{r table2, echo=FALSE, fig.cap="Table 2", out.width = '50%'}
+knitr::include_graphics("/Users/stantaov/4444.png")
+```
+
+Again, the code classified the clients very precisely. Note the reality matches exactly what was forecasted. That means we are able to forecast the chances a client has to buy the service based on his profile.
+
+In practical terms, the code allows the marketing operator to focus on those clients easer to be reached and the ones more prone to actually buy the services. The spreadsheet below gives a better view of the correlation between sales effort and success:
+
+```{r table3, echo=FALSE, fig.cap="Table 3", out.width = '50%'}
+knitr::include_graphics("/Users/stantaov/555555.png")
+```
+
+Note that with 33,63% of the potential clients (Group 3, 4 and 5) the company would be able to sell 55,61% of all sales.  This code gives the organization the chance to for example: remove 66.37% of the clients from the calling list (saving the correspondent sales effort) but loosing just 44.39% of the sales.
+From the point of view of the third part company executing the sales process we have a situation with the following costs:
+
+1)	Without classifying the clients and operating 100% of the mailing, the third part company would need 100 sales agents (call-center operators) – Each earns 3.000 month -> total of 300.000 month with personnel (Plus around 80.000 with telecom and infra). This number of agents operates 300.000 sales tries per month with a success rate around 2%-> 6.000 actual sales month. 
+
+For each sales the company would get 70 as commission. Total revenue generated by the operation 420.000
+
+Expenses: 380.000
+Revenue:  420.000
+Profit       :    40.000
+
+2)	Classifying the clients the third part company becomes able to make 55% of the sales with 33% of the workforce (reducing the 300.000 to 100.000 the potential clients). That would bring the personnel cost down from 300.000 to 100.000. and the cost of infra from 80.000 to 23.000. 55% of the sales would bring the revenue down from 420.000 to 230.000
+Expenses: 123.000
+Revenue:  230.000
+Profit       :  117.000
+
+Through the classification process  the third part  company managed to almost triple the profit in this operation (from 40 to 117).
