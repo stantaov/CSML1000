@@ -1,13 +1,15 @@
 
-# Forecasting Sales in a Fast-Food Chain
-
-![](https://github.com/ML1000/Assignment-1/blob/master/1.jpg)
+# Unsupervised Clustering for Classifying Clients
 
 
 ![](https://github.com/stantaov/CSML1000/blob/master/Assignment%202/shinyapp.jpg)
 
 
-In today’s highly competitive and constantly changing business environment, the accurate and timely estimation of future sales, also known as sales prediction or sales forecasting, can offer critical knowledge to companies involved in the manufacturing, wholesale or retail of products. Short-term predictions mainly help in production planning and stock management, while long-term predictions can help in business development decision making. In our specific case, we have a fast-food chain in Brazil with 400 stores with difficulty in predicting its short term production.
-Sales prediction is particularly important for this particular company due to the short shelf-life of many of its products, which leads to loss of income in both shortage and surplus situations. Producing too many leads to waste of products, while producing too few leads to opportunity loss. Therefore we have a situation where predicting correctly how much you have to produce each item each day is important.
-Moreover, food consumer demand is constantly fluctuating due to factors such as price, promotions, changing consumer preferences or weather changes. Sales prediction is typically done arbitrarily by managers. However, skilled managers are hard to find and they are not always available. In our specific case, this forecast is done based on experience however it remains far from accurate. Average loss (too many or too few) spins around 10%. Here it is important to put the management perspective: It is their view today they rely too much on the managers and would like to have a computer system that can play the role of a skilled manager. Over time the expectation was to have some tool that would free the company from human dependence. In addition, they believe that the level of error is high and could be reduced.
-Therefore, from the management perspective, a system capable of predicting the sales would be worth having even if at the beginning it doesn´t perform better than the current process. Equal performance would be acceptable. In addition to that, there was an understanding that the system would be able to improve its performance over time as more and more historical data is added to its reference database.
+Based on the client profile identify the chances of success in reaching the client and once reaching it the chances of selling to it. Based on this percentage we would be able to classify the potential clients by “chance to be reached” and “chance to sell”. These two percentages would allow us to group these clients. This grouping would allow better management of the sales effort.
+In summary, the objective is to identify patterns associating with the profile of the client with success in reaching and selling.
+The product being sold is a credit card and the client base is the pre-existing list of people having bank accounts in a large bank in Brazil.
+The bank doesn ́t operate the sales itself. A third part company is sub-contracted to do the actual sales campaign through the phone. The database with the client’s details is forwarded to this company by the bank.
+From the perspective of this third part company, the objective is how to maximize sales with the minimum sales effort.
+To address this issue the classification of the clients in terms of their propensity to be reached and to buy the product is crucial.
+In addition to that, the data exploration also gives insights about possible strategies of pre- processing the database which could eliminate the need for some types of calls.
+Another important point linked with the process is the fact that our concern here is how to increase the sales effectiveness, we assume that every client in the list, theoretically can have the credit card. There is no negative-classification in the sense that some profiles cannot get the card. The idea is just to identify if a profile is likely/unlikely to purchase a card. A priori eligibility for having the card was done by the bank when preparing the mailing sent to the third part company. Therefore we are not faced here with eventual ethical dilemmas (See responsible AI in consumer enterprise).
