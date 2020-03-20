@@ -3,7 +3,7 @@
 # Credit Card Fraud Detection
 
 
-![](https://github.com/stantaov/CSML1000/blob/master/Assignment%202/shinyapp.jpg)
+![](https://github.com/stantaov/CSML1000/blob/master/Final Project/shinyapp-final-project.jpg)
 
 
 Abstract
