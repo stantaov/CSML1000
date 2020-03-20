@@ -1,0 +1,32 @@
+library(shiny)
+library(MLmetrics)
+library(VIM)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(caTools)
+library(caret)
+library(ROSE)
+library(DMwR)
+library(data.tree)
+library(party)
+library(randomForest)
+library(pROC)
+library(e1071) 
+library(xgboost) 
+setwd("/Curso-ML/Assignment-3/")
+train <- read.csv("transactions-3.csv") ## Items
+## making sure all variables are numeric or factor
+train$fraud      <- as.factor(train$fraud)
+train$V12        <- as.numeric(train$V12)
+###train_smote <- SMOTE(fraud ~ ., train, perc.over = 100, perc.under=200)
+train_smote <- select(train_smote,sex..,sex.F,sex.M,income1.0.2,income1.0.4,income1.0.6,income1.0.8,income1.1,same_city,same_count,seller_sco,dispersao,type.0,type.0.25,type.0.5,type.0.75,type.1,V10,V11,V12,fraud)
+train_smote$fraud <- as.factor(train_smote$fraud)
+data_train <- subset(train_smote, select = -c(fraud))
+
+dtrain <- xgb.DMatrix(data = as.matrix(data_train), label= (train_smote$fraud))
+
+tb_model5 <- xgboost(data = dtrain, # the data   
+                     nround = 200, # max number of boosting iterations
+                     objective = "reg:linear") 
+saveRDS(tb_model5, file = "/Curso-ML/Assignment-3/model5.rda")
