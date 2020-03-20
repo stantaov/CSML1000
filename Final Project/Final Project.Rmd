@@ -1,0 +1,693 @@
+---
+title: "Credit Card Fraud Detection"
+author: 'Group 1: Luiz Carvalho, Manoj Soman Nair, Stanislav Taov'
+date: "17/03/2020"
+output:
+  pdf_document: default
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(VIM)
+library(ggplot2)
+library(dplyr)
+library(readr)
+library(summarytools)
+library(corrplot)
+
+df <- read.csv('/Users/stanislav/transactions.csv')
+```
+
+## **Abstract** 
+
+According to Nilson Report (https://nilsonreport.com) the credit card frauds cost business and card issuers around 28 billion dollars in 2018. As we are moving into a cashless society this number is going to grow steadily. When talking about fraudulent transactions, most people think about the values defrauded. However, the total cost of the frauds has to be understood in its whole extension:
+
+1)    There is the loss due to the fraud itself (what most people see)
+2)    There is the cost associated with managing the losses – cancelling orders and refunding 
+charges (exceeds the cost of the frauds 300%)
+3)    There is the cost of mistakenly rejecting orders
+4)    There is the cost of developing and applying mechanisms to avoid fraud.
+
+Therefore, the problem is not only what you lose due the frauds themselves, but the cost to mitigate the negative impact and manage the process (update security measures, block and reissue cards, reimburse customers etc), the cost of building and maintaining mechanisms to prevent the frauds and of course the cost of losing money when you unduly block a sales assuming wrongly it is a fraud.
+
+Therefore, many financial organizations are facing the challenge of building a successful fraud detection model which is easy to maintain and highly effective in spotting frauds and at the same time doesn´t have a too high false-positive rate. Certain ML algorithms seem to be well suited to address all these issues. They can help automatize the process of adjusting for identifying new types of fraud (the big problem with the current processes) and it can archive an effective identification rate without too many false-negative.
+
+
+## **Problem statement /Business problem**
+
+Our objective is to spot possible frauds in credit card operations. This identification will be based on the client´s profile, the seller´s profile and the data of the transaction itself. The objective is to flag transactions with the high possibility of fraud.
+
+Today frauds spin around 4% of all sales made with credit cards in Brazil. Our client already has mechanisms in place that detects potential fraudulent transactions, however, these mechanisms have two problems: 
+
+1)    They deploy semi-static rules that generate a scenario where people in the background have to keep looking for new types of fraud to keep adjusting the current model.
+
+2)    The process suffers a paradoxical problem: if it is too stringent it creates problems for the clients blocking legit sales if it is too lose it allows a too high level of fraud. A middle term is difficult to archive – even more so when you have to keep adjusting the rules.
+
+To address these two issues, the idea would be to create a model that would not only identify (or at least flag) the suspect transactions but also would identify changes in the patterns and adapt automatically to new fraud patterns.
+
+In order to do that we managed to get a database merging the three data sources (client, seller and transaction) and the idea is to develop a machine learning model which not only assertive (Assertive meaning identify a high percentage of the actual frauds without blocking too many legit ones) but adaptable.
+
+We were verbally informed that the current mechanism spots around 50% (2% of the total) of potential frauds and flags around 2% of legit ones (false positive). If that is true (We have no way to verify this information), it means that the current process gets it right at around 2% of all transactions and wrong at 2%. In summary, it can stop 50% of all fraudulent transactions and has a false positive rate of 2%.
+
+It is interesting to notice that although frauds correspond to just 4% of all transactions, they answer for 8% of the total value of the transactions. It means each 1% of fraud elimination corresponds to approximately R$ 16.000.000,00 /month (CAD 5.330.000,00).
+
+
+## **Datasets/Getting the data**
+
+We used a real anonymized and sanitized dataset representing a subset of the transactions that occurred during one day of September of 2019 in Brazil, totalling 290.398 transactions.
+
+## **Data dictionary**
+
+The database contains three sources: 
+•	Clients data
+•	Sellers data
+•	And transactional data.
+Information regarding the clients:
+
+•	Age
+
+•	Sex
+
+•	Income
+
+•	Average expenditure  in recurrent  payments  per transaction 
+
+•	Average expenditure  buying goods (Using the card directly) per transaction 
+
+•	Average expenditure buying services (using the card directly) per transaction 
+
+•	Average expenditure buying goods on-line per transaction
+
+•	Average expenditure buying services on-line per transaction
+
+Information about the seller:
+
+•	Score of the seller (Number 0 to 100) indicating the ranking of the seller regards frequency of frauds.
+
+Information about the transactions:
+
+•	Type: which one of the five categories it belongs (0-recurrent, 1- goods, 2-services, 3-online goods or 4-online services).
+
+•	Value of the transaction
+
+•	If the addresses of the seller and the buyer  are in the same city 
+
+•	If the addresses of the seller and the buyer  are in the same country
+
+•	If the transaction was fraudulent or not (Y or N)
+
+
+```{r table1, echo=FALSE,  out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Picture134533434.png")
+```
+
+
+
+
+
+\newpage
+
+## **Data exploration**
+
+The data contained 14 variables with 290398 observations. The variables included sex, age, income, avr_recur, avr_servic, avr_go, avr_int_se, avr_int_go, same_city, same_count, seller_sco, value, type, fraud. The details can be seen below.
+
+Checking the data structure and frist 10 rows.
+
+```{r data, echo=FALSE}
+head(df,10)
+```
+```{r data2, echo=FALSE}
+str(df) 
+```
+
+\newpage
+Checking for missing values
+
+```{r missing2, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/345rerre.jpg")
+```
+```{r missing "}
+sum(is.na(df))
+```
+
+We discovered that there are 4722 missing values in sex column since we can't use mean or mode methods for categorical variable sex we decided to remove all missing values in sex column.
+
+
+```{r drop}
+df <- na.omit(df)
+```
+
+\newpage
+Checking correlations between features in our dataset
+
+
+```{r corr}
+correlations <- cor(df[, sapply(df, is.numeric)], method="pearson")
+corrplot(correlations, number.cex = .9, method = "circle", type = "full", tl.cex=0.8,tl.col = "black")
+```
+
+We can observe that most of the features in our dataset are not correlated. There is a strong negative correlation between same_city and value and between same_city and type. We will check the variable importance after we create some models. 
+
+We convert sex, income, type columns into the categorical data type and continue with data exploration. 
+
+
+```{r conversion}
+df$sex <- as.factor(df$sex)
+df$income <- as.factor(df$income)
+df$type <- as.factor(df$type)
+```
+
+
+Below we can see statistical descriptions for each feature in our dataset
+
+```{r stats, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/pooprt.jpg")
+```
+
+\newpage
+
+After removing NA values from sex columns the data set contains 285,676 transactions. The mean value of all transactions is $180.88 while the largest transaction recorded in this data set amounts to $1499.98. The distribution of the monetary value of all transactions is right-skewed. 
+
+```{r Value, echo=FALSE}
+d <- density(df$value)
+plot(d, main="Distribution of Values")
+polygon(d, col="red", border="black")
+```
+\newpage
+Let's see the number of fraudulent transactions
+
+```{r Vafraudlue, echo=FALSE}
+ggplot(df, aes(fraud)) +
+  geom_bar(aes(fill = fraud)) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Distribution of Fraud Feature")
+
+print(table(df$fraud))
+print(prop.table(table(df$fraud))*100)
+```
+
+As expected, most transactions are non-fraudulent and our data is quite imbalanced. In fact, 95.95% of the transactions in this data set were not fraudulent while only 4.05% were fraudulent. The graph below highlights this significant contrast.
+\newpage
+Let's examine the sex column. We can see that gender distribution is almost balanced, there are 52% of female and 48% male customers. 
+
+
+```{r statdfdfs, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/sdfsdfsdfw3.jpg")
+```
+\newpage
+Let's examine the age column.
+
+```{r age, echo=FALSE}
+hist(df$age, col="blue", main="Distribution of Age", xlab="Age Class", ylab="Frequency", labels=TRUE, ylim = c(0, max(df$age)))
+```
+
+There are a few outliers in the age column probably related to typos. We will remove them.
+
+
+```{r age_remove}
+df <- df %>% 
+  filter(age < 95)
+```
+
+```{r age_new, echo=FALSE}
+ggplot(df, aes(x=age, fill=I("blue"))) +
+  geom_histogram(position="identity", bins = 11) +
+  theme_minimal() +
+  ggtitle("Age Distribution") + 
+  theme(legend.position = "none")
+```
+
+
+Now age distribution looks more realistic, and data distribution looks binomial, with two spikes in 30 and 65 year age groups. 
+\newpage
+Let's look at the income feature.
+
+```{r income, echo=FALSE}
+ggplot(df, aes(income)) +
+  geom_bar(aes(fill = income)) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Income Distribution")
+
+print(prop.table(table(df$income))*100)
+```
+
+
+The dataset is dominated by one income group category (E - 90.64%). E income category is the category with the lowest income level. There are a few customers in the highest income class (A - 1.57% and B - 0.08%)
+
+\newpage
+It’s clear from the graphs below that most of fraud transactions occurred in lower rage, between $5 and $55 of the transaction value. However, we also see that other values of fraud transactions are evenly distributed. 
+
+
+```{r income2, echo=FALSE}
+ggplot(df, aes(x=fraud, y=value, color=fraud))+
+  geom_boxplot() +
+  ggtitle("Transaction Amount") +
+  theme_minimal()
+```
+
+
+```{r tans_val, echo=FALSE}
+ggplot(df, aes(x = value, fill = fraud)) +
+  geom_density(alpha = 0.4) +
+  scale_x_continuous(limits = c(0, 500), breaks = seq(0, 500, 100)) + 
+  labs(title = "Transaction Amount", 
+       x = "Value", 
+       y = "Density", 
+       col = "Class") + 
+  theme_minimal() +
+  scale_fill_discrete(labels = c("Fraud", "Not Fraud"))
+```
+\newpage
+
+Let's boxplot avr_recur (average expenditure for reoccurring  transactions) against fraud
+
+
+```{r avr_recur, echo=FALSE}
+ggplot(df, aes(x=fraud, y=avr_recur, fill=fraud))+
+  geom_boxplot() +
+  ggtitle("Average Expenditure for Reoccurring Transactions") +
+  theme_minimal()
+```
+
+Interestingly to see that there are no clear differences between fraud and not fraud for this feature.
+\newpage
+Next, we check avr_servic (average expenditure for buying services) against fraud
+
+```{r avr_servic, echo=FALSE}
+ggplot(df, aes(x=fraud, y=avr_servic, fill=fraud))+
+  geom_boxplot() +
+  ggtitle("Aaverage Expenditure for Buying Services") +
+  theme_minimal()
+```
+
+Similar picture as we've seen before, the range of transactions is between 0 and 160 for both fraud and not fraud transactions. 
+\newpage
+Let's take a look at avr_go (average expenditure for buying goods) against fraud
+
+```{r avr_go, echo=FALSE}
+ggplot(df, aes(x=fraud, y=avr_go, fill=fraud))+
+  geom_boxplot() +
+  ggtitle("Average Expenditure for Buying Goods") +
+  theme_minimal()
+```
+
+There is no clear difference between two (fraud, not fraud) classes. We will continue checking avr_int_se (average expenditure for buying services online) and avr_int_go (average expenditure for buying goods online)
+
+```{r avr_int_se, echo=FALSE}
+ggplot(df, aes(x=fraud, y=avr_int_se, fill=fraud))+
+  geom_boxplot() +
+  ggtitle("Average Expenditure for Buying Services Online") +
+  theme_minimal()
+```
+
+We see high variability in data for both fraudulent and not fraudulent transactions for avr_int_se feature. It looks like most of the fraudulent transactions occurred for the online services category. 
+
+```{r avr_int_go, echo=FALSE}
+ggplot(df, aes(x=fraud, y=avr_int_go, fill=fraud))+
+  geom_boxplot() +
+  ggtitle("Average Expenditure for Buying Goods Online") +
+  theme_minimal()
+```
+
+\newpage
+Next, we explore the type of transaction feature. This feature describes five categories each transaction belongs to (0-recurrent, 1- goods, 2-services, 3-online goods or 4-online services)
+
+```{r type, echo=FALSE}
+ggplot(df, aes(type)) +
+  geom_bar(aes(fill = type)) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  ggtitle("Transaction Type Distribution")
+```
+
+The type feature has a uniform distribution.
+
+```{r type2, echo=FALSE}
+ggplot(df, aes(type)) +
+  geom_bar(aes(fill = fraud)) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  geom_text(stat = 'count',aes(label =..count.., vjust = -0.5)) +
+  scale_fill_discrete(labels = c("Not Fraud", "Fraud")) +
+  ggtitle("Transaction Type Distribution")
+```
+
+It seems the online services category has the highest percentage of fraudulent transactions. 
+\newpage
+Cheking seller score feature. 
+
+```{r seller_sco, echo=FALSE}
+hist(df$seller_sco, col="blue", main="Distribution of Seller Scrore", xlab="Seller Scrore", ylab="Frequency")
+```
+
+Interestingly to see that seller score feature has a uniform distribution.
+
+```{r seller_sco fraud, echo=FALSE}
+ggplot(df, aes(seller_sco)) +
+  geom_histogram(aes(fill = fraud), bins = 100) + 
+  theme_minimal() +
+  theme(axis.text.y = element_text(size = 12, angle = 90),
+        axis.text.x = element_text(size = 12)) +
+  scale_y_continuous(labels = scales::comma) +
+  ggtitle("Transaction Type and Fraud Distributuion")
+```
+
+
+Very interesting, only seven seller scores have fraudulent transactions and only two of the seven have a very high percentage of fraud.
+
+
+The conclusion of our analysis showed that the factors affecting the chance of fraud have much more to do with the type of the transaction, how far from the average the value of the transaction is and the income of the buyer (wealth people tend to have fewer frauds – better financial education?). And only after that, we have the score of the seller.
+
+
+Note that the only personal parameter which seems to affect the level of fraud is the income (Age and sex doesn´t seem to have any significant impact). Now with or database adjusted we tested three possible strategies:
+\newpage
+
+## **Selecting the training data and the test data**
+
+The idea is to use 95% of the measurements as our training data and 5% as our test data. We had a database with 290.398 clients and we separated it into training data 275.878 and test data 14.520. 
+
+
+## **Approach /Analytical problem**
+
+Initially, we realized that the variable value only has a meaning as long it is compared with the average expenditure with this particular type of transaction. Given this fact, we realized that it would be necessary to create a synthetic variable called “Dispersion”. Dispersion is created comparing the value of the transaction and its type with the average expenditure with this particular type. Example: If the value is equal R$ 20,00 and type equal 0. That means this is a recurrent transaction. The average expenditure with recurrent transactions is R$ 25,00. In that case “Dispersion” will be:  absolute (25-20)/25 -> 0.20. This variable gives us a view of how far from the average the value of the transaction.
+
+In sequence, we evaluated if we could deploy the method decision-tree directly to identify the frauds. The results were a bit disappointing, although the accuracy seems to be good it happens just because the data is imbalanced, and the frauds are 4% of the total.
+
+The objective is to actually say if the transaction is a fraud or not (not just calculate the chance it to be). Note it identified correctly only 26% of the frauds (157 out of 588), although with a very low false positive (0,2%).
+
+
+```{r table2, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/123234444.jpg")
+```
+
+
+However, the method indicated how many clusters would be ideal (74) and also gave us an idea about how to proceed. The tree also discovered an interesting pattern: The personal data has almost nothing to do with the results. The relevant factors identified were:
+
+•	Score of the seller – Indicates the seller is often target for frauds (probably due type of service or lack of internal controls).
+•	The type of transaction – Internet services have a way more frauds than everybody else
+•	City – Transactions where the buyer and the seller are in different cities have much more frauds (they tend to overlap with internet services sales).
+•	Dispersion (How far from the average spent with this kind of item the value of the operation is)
+
+Then, we decided to create a second synthetic variable (V11). To get to the V11 we grouped the transactions using k-means and checked the % of the frauds in each cluster. In sequence, we verified to which cluster the transaction belongs and loaded this % into V11. 
+
+In the sequence when we grouped the transactions by clusters we noticed that there were direct and inverse correlations between some of the variables and the frequency of occurrence of frauds. Analyzing it further we realized that we could measure this correlation in a variable. Therefore we created a third synthetic variable which we called “Points”
+
+
+The correlations identified were as follows:
+
+```{r table3, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/345343434.jpg")
+```
+
+
+```{r table4, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Pictddfdfure1.png")
+```
+
+That understanding allowed us to create an algorithm that gives the transaction a score between 1 and 8 (the closer you get to 8 the bigger the chances to have a fraud). That variable becomes another of our indicators. Therefore we created three synthetic variables “Dispersion”, “V11” and “Points”.
+
+```{r table5, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Picture332ws1.png")
+```
+
+As we can see, the percentage of frauds has strong correlation with five variables:
+
+V11 => Synthetic variable V11 (come from the clustering process - % of frauds associated with the profile) is also very effective predictor. (0.99)
+
+Type => type of the transaction (Recurrent, in person or on-line). (0.88)
+
+Disper=> Synthetic variable which indicates how far from the average expenditures of this specific client with that specific kind of item the transaction is. (0.76)
+
+Income => Income of the buyer (0.69)
+
+Pontos => synthetic variable merging eight parameters (0.67)
+
+Once we finished creating the synthetic variables we evaluated that we need to treat the data regards three aspects:
+
+•	Encoding
+•	Cross-validation (to test each model) 
+
+The k-fold cross-validation procedure provides a good general estimate of model performance that is not too optimistically biased, at least compared to a single train-test split. 
+
+•	Balancing using SMOTE (The database is very imbalanced – frauds are just 4% of the samples)
+
+
+At 4%, this is clear we have a skewed and imbalanced dataset. Imbalanced data pose classification problem for predictive modelling as most of the machine learning algorithms are used for classification were designed around the assumption of an equal number of examples for each class. 
+
+As a result, models train on imbalanced data have poor predictive performance specifically on minority class. Specifically, for fraud detection where predicting the minority class in the most important aspect of the model.
+
+Synthetic Minority Oversampling Technique makes data balanced by synthesizing new data from the existing dataset using KNN. The approach is effective because new synthetic examples from the minority class are created that are plausible and relatively close in feature space to existing examples from the minority class.
+
+Once we got the data encoded and balanced we tested five methods to spot frauds. We also tested these five methods without treating the data just to check if balancing the data was, in fact, improving the quality of the identification process. In a way, it was a research process.
+
+•	Decision-tree (Baseline Model)
+•	Random-Forest
+•	Random Forest + Bagging
+•	Support Vector Machine Classifier 
+•	XGBoost
+
+In logical terms we created the following analysis scenarios:
+
+
+```{r table6, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/Picturddeee1.png")
+```
+
+This strategy of testing several possible techniques was important because we needed to explore alternatives and try through these techniques to improve the success rate of the identification process.
+
+Summary of findings /Evaluating the results 
+
+We tested several models training to identify which ones yield the best results. It was a systematic process, where we run the algorithm and evaluate the confusion Matrix. The objective was to identify the % of frauds identified correctly and the percentage of false positive.
+
+Using Decision-Tree model (not treated)
+
+The composition of these variables applied in a Decision tree-method generated the following result:
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+
+•	The model identified as fraud  and they were in fact frauds                   231 ( 1,57%)
+•	The model identified as fraud but they were not                               444  ( 3,05%)
+•	The model identified as not being frauds but they were                        357  ( 2,45%)
+•	The model identified as not being frauds and they in fact were not            13.488 (93,78%)
+
+It spotted 60,71% of the frauds with a false positive rate (444 ->3,05%)
+
+```{r table7, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/34553434342.jpg")
+```
+
+Using Random Forest model (not treated)
+If instead using decision tree we use random forest the results would be like:
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                       364  (2,5%)
+•	The model identified as fraud but they were not                                   315  ( 2,1%)
+•	The model identified as not being frauds but they were                            224  (1,5%)
+•	The model identified as not being frauds and they in fact were not                13.617 (93,9%)
+
+It spotted 62% of the frauds with false positive rate (False positive ->2,1%)
+Therefore using random forest would be more effective in identifying frauds but would triple the percentage of false positive.
+
+```{r table8, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/34344ee34.jpg")
+```
+
+```{r table28, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/Picturerrrrrweew1.png")
+```
+
+Note the relative importance of the synthetic variables.
+
+1.	Pontos – V12 – Synthetic variable
+2.	V11 -  Kmeans % - Synthetic variable
+3.	Seller_scor – Original variable (seller info)
+4.	Type of transaction  - Original variable 
+5.	Dispersion – synthetic variable   
+
+Note that this ranking doesn´t match exactly the ranking identified when using correlation.
+
+## **Using the Random Forest + Bagging model (not treated)**
+
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.284)
+
+•	The model identified as fraud  and they were in fact frauds                      457 ( 3,14%)
+•	The model identified as fraud but they were not                                  677  ( 4,6%)
+•	The model identified as not being frauds but they were                           131  (0,9%)
+•	The model identified as not being frauds and they in fact were not               13.255 (91,28%)
+
+It spotted 77% of the frauds with false positive rate (False positive ->4,6%)
+
+```{r table9, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/vdfi343434.jpg")
+```
+
+Using the Support Vector Machine Classifier model (not treated)
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                       229   ( 1,5%)
+•	The model identified as fraud but they were not                                   162  ( 1,1%)
+•	The model identified as not being frauds but they were                            359  (2,4%)
+•	The model identified as not being frauds and they in fact were not                13.770 (94,83%)
+
+It spotted 38,94% of the frauds with false positive rate (False positive ->1,1%)
+
+```{r table11, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/34343534534511.jpg")
+```
+
+```{r table12, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/Picturedfvsx1.png")
+```
+
+
+## **Using the XGBoost model(Not treated)**
+
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                         537   ( 3,6%)
+•	The model identified as fraud but they were not                                     780  ( 5,3%)
+•	The model identified as not being frauds but they were                              51    (0,3%)
+•	The model identified as not being frauds and they in fact were not                  13.152   (90,57%)
+
+It spotted 91,33% of the frauds with false positive rate (False positive ->5,30%)
+
+```{r table13, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/4rwww0o.jpg")
+```
+
+## **Using Decision-Tree model (treated with SMOTE)**
+
+The composition of these variables applied in a Decision tree-method generated the following result:
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                     314 ( 2,1%)
+•	The model identified as fraud but they were not                                 1.036  ( 7,13%)
+•	The model identified as not being frauds but they were                          274  ( 1,88%)
+•	The model identified as not being frauds and they in fact were not              12.896 (88,81%)
+
+It spotted 53,40% of the frauds with a false positive rate (False positive -> 7,13%)
+
+```{r table14, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/xcvxcv2333.jpg")
+```
+
+## **Using Random Forest (treated with SMOTE)**
+
+The composition of these variables applied in a Decision tree-method generated the following result:
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                     463 ( 0,8%)
+•	The model identified as fraud but they were not                                 1.163  ( 8,0%)
+•	The model identified as not being frauds but they were                          125  ( 3,1%)
+•	The model identified as not being frauds and they in fact were not              12.769 (87,94%)
+
+It spotted 78,40% of the frauds with a false positive rate (False positive ->8,0%)
+
+```{r table15, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/34csdc32.jpg")
+```
+
+## **Using the Random Forest + Bagging (treated with SMOTE)**
+
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                       487  ( 3,3%)
+•	The model identified as fraud but they were not                                   905  ( 6,23%)
+•	The model identified as not being frauds but they were                            101  (0,6%)
+•	The model identified as not being frauds and they in fact were not                13.027  (89,71%)
+
+It spotted 82,82% of the frauds with false positive rate (False positive ->9,9%)
+
+```{r table16, echo=FALSE, out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/sdfsdfccw33.jpg")
+```
+
+## **Using the Support Vector Machine Classifier model (treated with SMOTE)**
+
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                       291   ( 2,0%)
+•	The model identified as fraud but they were not                                   1450  ( 9,9%)
+•	The model identified as not being frauds but they were                            297  (2,0%)
+•	The model identified as not being frauds and they in fact were not                12.482 (85,96%)
+
+It spotted 49,49% of the frauds with false positive rate (False positive ->9,9%)
+
+```{r table17, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/sd0sd93.jpg")
+```
+
+```{r table18, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/Pictureq34233.png")
+```
+
+## **Using the XGBoost model(treated with SMOTE)**
+
+In a test set composed by 5% of the total database (5% of 290.398  -> 14.520)
+
+•	The model identified as fraud  and they were in fact frauds                       558   (3,8%)
+•	The model identified as fraud but they were not                                   927   (6,3%)
+•	The model identified as not being frauds but they were                            30    (0,2%)
+•	The model identified as not being frauds and they in fact were not                13.005   (89,56%)
+
+It spotted 94,90% of the frauds with false positive rate (False positive ->5,30%)
+
+```{r table19, echo=FALSE,  out.width = '50%'}
+knitr::include_graphics("/Users/stanislav/34rdesd2.jpg")
+```
+
+
+\newpage
+## **Summarizing the methods and conclusion:**
+
+```{r table20, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Picturesdf323321.png")
+```
+
+
+The table above represents a potential improvement of 44,89 % over the current model. That means in practical terms that every day you would be able to spot something around 5.936 additional frauds, totalizing a value around CAD 8.444.000 a month in terms of avoided frauds. Of course, there is also the issue of the false positive that can lead to alienating clients, which due to our lack of understanding of the business is hard for us to define what would be acceptable. 
+
+However, the client can improve the most accurate model by accepting higher losses, especially from high-net-worth cardholders, in order to prevent alienating those clients and losing business due to the increase in false-positive detection. 
+
+Another important additional advantage would be having the dynamic process as it “learns” new patterns as they appear and therefore will demand less effort to maintain.
+
+We understand that the actual implementation of the model needs to be analyzed with care and skepticism, tests need to be made and eventual performance issues evaluated. (We need to remember that the whole verification has to occur in few seconds just after the user made the transaction – although in the online services we may have the option of letting an order “pending approval”).
+
+In summary, although we recognize that there are several issues that need to be evaluated it seems clear that deploying the machine learning model to this process would add a lot of value and surely should be considered.
+
+
+```{r table21, echo=FALSE,  out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Picturesdsdsdsd1.png")
+```
+
+## **Shiny App**
+
+```{r table22, echo=FALSE, out.width = '100%'}
+knitr::include_graphics("/Users/stanislav/Picturesdsdapp1.png")
+```
+
+We created and deployed a simple shiny app (can be seen here https://stan-t.shinyapps.io/fraud/)  that evaluates five models we built previously. The app loads Decision Tree, Random Forest, Tree Bagging, SVM and XGBoost model previously saved using file RDA format. All these models were trained on balanced data using SMOTE. The app uses new features that we engineered previously (Dispersion, V10, V11, pontos). The end-user can select the following variables: age, sex, income, the score of the seller, transaction type and value of the transaction to predict fraudulent transactions.
+
+The output of the app shows a table with the prediction for each model. We believe that the current app can be further improved for example it can take a majority voting and shows only one output based on all models. It can provide more accurate results since certain models are good at predicting fraud and others are good at limiting false-positive results.
+\newpage
+## **Limitations**
+
+We faced a few significant hardware issues that limited our app to perform the comparison of all 10 models (5 models with SMOTE and 5 models without SMOTE). The same issue we faced when we tried to add a majority voting for the shiny app. When deployed the app online using shinyapps.io however we experienced out of memory issues even with a limited amount of models. Despite all limitations, we still believe that the app and models can have business applications for the client and can be used in tandem with the current model/processes to detect fraudulent transactions.
+
+
